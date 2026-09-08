@@ -1,0 +1,223 @@
+# Command Reference Guide
+
+This file is generated from live CLI help output.
+For authoritative command behavior, also use:
+
+```bash
+asc --help
+asc <command> --help
+asc <command> <subcommand> --help
+```
+
+To regenerate:
+
+```bash
+make generate-command-docs
+```
+
+## Usage Pattern
+
+```bash
+asc <subcommand> [flags]
+```
+
+## Global Flags
+
+- `--api-debug` - Enable HTTP debug logging to stderr (redacts sensitive values)
+- `--debug` - Enable debug logging to stderr
+- `--profile` - Use named authentication profile
+- `--report` - Report format for CI output (e.g., junit)
+- `--report-file` - Path to write CI report file
+- `--retry-log` - Enable retry logging to stderr (overrides ASC_RETRY_LOG/config when set)
+- `--strict-auth` - Fail when credentials are resolved from multiple sources (default: false)
+- `--version` - Print version and exit (default: false)
+
+## Command Families
+
+### Getting Started
+
+- `auth` - Manage authentication for the App Store Connect API.
+- `doctor` - Diagnose authentication configuration issues.
+- `install-skills` - Install the asc skill pack globally for App Store Connect workflows.
+- `init` - Initialize asc helper docs in the current repo.
+- `docs` - Access embedded documentation guides and reference helpers.
+
+### Web Session Commands
+
+- `web` - Apple web-session workflows, including finance report downloads.
+
+### Analytics and Finance
+
+- `analytics` - Request and download analytics and sales reports.
+- `ads` - Manage Apple Ads API resources.
+- `optimize` - Build cross-API optimization plans.
+- `insights` - Generate weekly and daily insights from App Store data sources.
+- `finance` - Download payments and financial reports.
+- `performance` - Access performance metrics and diagnostic logs.
+
+### App Management
+
+- `apps` - List and manage apps in App Store Connect.
+- `app-setup` - Post-create app setup automation.
+- `app-tags` - Inspect Apple-generated App Store discoverability tags.
+- `versions` - Manage App Store versions.
+- `localizations` - Manage App Store localization metadata.
+- `metadata` - Manage app metadata with deterministic workflows and keyword tooling.
+- `screenshots` - Upload and manage App Store screenshots, including local capture, framing, and matrices.
+- `video-previews` - Manage App Store app preview videos.
+- `background-assets` - Manage background assets.
+- `product-pages` - Manage custom product pages and product page experiments.
+- `routing-coverage` - Manage routing app coverage files.
+- `pricing` - Manage app pricing and availability.
+- `pre-orders` - Manage app pre-orders.
+- `categories` - Manage App Store categories.
+- `age-rating` - Manage App Store age rating declarations.
+- `accessibility` - Manage accessibility declarations.
+- `encryption` - Manage app encryption declarations and documents.
+- `eula` - Manage End User License Agreements (EULA).
+- `agreements` - Manage agreements in App Store Connect.
+- `app-clips` - Manage App Clip experiences and invocations.
+- `android-ios-mapping` - Manage Android-to-iOS app mapping details.
+- `marketplace` - Manage marketplace resources.
+- `alternative-distribution` - Manage alternative distribution resources.
+- `nominations` - Manage featuring nominations.
+- `game-center` - Manage Game Center resources in App Store Connect.
+
+### TestFlight and Builds
+
+- `testflight` - Manage TestFlight workflows.
+- `builds` - Manage builds in App Store Connect.
+- `build-bundles` - Manage build bundles and App Clip data.
+- `build-localizations` - Manage build release notes localizations.
+- `xcode` - Local Xcode build/archive/export and signing-settings helpers.
+- `distribute` - Plan, execute, inspect, and publish iOS distribution artifacts.
+- `sandbox` - Manage sandbox testers in App Store Connect.
+
+### Review and Release
+
+- `release` - Run high-level App Store release workflows.
+- `status` - Show a release pipeline dashboard for an app.
+- `release-notes` - Generate and manage App Store release notes.
+- `review` - Manage App Store review details, attachments, and submissions.
+- `reviews` - List and manage App Store customer reviews.
+- `submit` - Submission lifecycle tools; use `publish appstore --submit` to ship.
+- `validate` - Canonical App Store submission readiness report.
+- `publish` - High-level publish workflows for TestFlight and App Store.
+
+### Monetization
+
+- `iap` - Manage in-app purchases in App Store Connect.
+- `storekit` - Manage StoreKit server APIs with In-App Purchase API keys.
+- `app-events` - Manage App Store in-app events.
+- `subscriptions` - Manage subscription groups and subscriptions.
+
+### Signing
+
+- `signing` - Manage signing certificates and profiles.
+- `bundle-ids` - Manage bundle IDs and capabilities.
+- `certificates` - Manage signing certificates.
+- `profiles` - Manage provisioning profiles.
+- `merchant-ids` - Manage merchant IDs and certificates.
+- `pass-type-ids` - Manage pass type IDs.
+- `notarization` - Manage macOS notarization submissions.
+
+### Team and Access
+
+- `account` - Inspect account-level health and access signals.
+- `users` - Manage users and invitations in App Store Connect.
+- `actors` - Lookup actors (users, API keys) by ID.
+- `devices` - Manage devices in App Store Connect.
+
+### Automation
+
+- `workflow` - Run multi-step automation workflows.
+- `webhooks` - Manage webhooks in App Store Connect.
+- `xcode-cloud` - Trigger and monitor Xcode Cloud workflows.
+- `notify` - Send notifications to external services.
+- `migrate` - Migrate metadata from/to fastlane format.
+
+### Utility
+
+- `system-status` - Check Apple Developer service health.
+- `diff` - Generate deterministic non-mutating diff plans.
+- `capabilities` - Show CLI, API, web-only, and public-API-limited capability coverage.
+- `search` - Search asc commands and examples for agent-oriented command discovery.
+- `snitch` - Report CLI friction as a GitHub issue.
+- `version` - Print version information and exit.
+- `completion` - Print shell completion scripts.
+- `schema` - Inspect App Store Connect API endpoint schemas at runtime.
+- `telemetry` - Manage CLI telemetry settings.
+
+## Scripting Tips
+
+- Output defaults are TTY-aware: interactive terminals default to `table`, while piped/non-interactive output defaults to minified `json`.
+- Use `--output table` or `--output markdown` for explicit human-readable output.
+- Use `--output json` for explicit machine-readable output.
+- Use `--paginate` on list commands to fetch all pages automatically.
+- Use `--limit` and `--next` for manual pagination control.
+- Prefer explicit flags and deterministic outputs in CI scripts.
+
+## High-Signal Examples
+
+```bash
+# List apps
+asc apps list --output table
+
+# Pause and resume Apple Ads campaigns
+asc ads campaigns pause --campaign CAMPAIGN_ID --ad-account AD_ACCOUNT_ID
+asc ads campaigns resume --campaign CAMPAIGN_ID --ad-account AD_ACCOUNT_ID --confirm
+
+# Manage App Store compatibility opt-ins through a web session
+asc web apps compatibility view --app "123456789"
+asc web apps compatibility edit --app "123456789" --ios-app-on-mac=false --ios-app-on-vision-pro=false
+
+# Upload a build
+asc builds upload --app "123456789" --ipa "/path/to/MyApp.ipa"
+
+# Generate local Xcode metadata before archiving
+asc xcode inject --manifest .asc/deployment.json --set version=1.2.3 --set build_number=42 --dry-run --output json
+
+# Inspect the selected local Xcode toolchain without changing host state
+asc xcode doctor --output json
+
+# Install and verify one signed IPA on an exact connected device
+asc xcode install --ipa .asc/artifacts/App.ipa --device-id COREDEVICE_IDENTIFIER --timeout 5m --output json
+
+# Staple and validate a notarized macOS artifact locally
+ASC_BYPASS_KEYCHAIN=1 asc notarization staple --file ./MyApp.dmg --confirm --output json
+ASC_BYPASS_KEYCHAIN=1 asc notarization validate --file ./MyApp.dmg --output json
+
+# Run local Xcode tests with structured results
+asc xcode test --project App.xcodeproj --scheme App --destination 'platform=iOS Simulator,name=iPhone 17 Pro' --output json
+
+# Plan, confirm, resume, check status, and live-verify a private ad hoc distribution run
+asc distribute plan --archive-path ./App.xcarchive --config .asc/distribution.json --plan .asc/distribution/plan.json --state-dir .asc/distribution/runs --output json
+asc distribute apply --plan .asc/distribution/plan.json --confirm PLAN_HASH --output json
+asc distribute resume --run RUN_ID --state-dir .asc/distribution/runs --output json
+asc distribute status --run RUN_ID --state-dir .asc/distribution/runs --output json
+asc distribute verify --run RUN_ID --state-dir .asc/distribution/runs --timeout 30s --output json
+
+# Stage an App Store version before submission
+asc release stage --app "123456789" --version "1.2.3" --build-id "BUILD_ID" --copy-metadata-from "1.2.2" --dry-run
+
+# Publish an App Store version (high-level)
+asc publish appstore --app "123456789" --ipa "/path/to/MyApp.ipa" --version "1.2.3"
+asc publish appstore --app "123456789" --ipa "/path/to/MyApp.ipa" --version "1.2.3" --submit --confirm
+asc status --app "123456789"
+
+# Canonical readiness and lower-level submission lifecycle flow
+asc validate --app "123456789" --version "1.2.3"
+asc validate --app "123456789" --version "1.2.3" --check-urls
+asc submit status --version-id "VERSION_ID"
+asc submit cancel --version-id "VERSION_ID" --confirm
+
+# Run a local automation workflow
+asc workflow run release
+```
+
+## Related Documentation
+
+- [../README.md](../README.md) - onboarding and common workflows
+- [API_NOTES.md](API_NOTES.md) - API-specific behavior and caveats
+- [TESTING.md](TESTING.md) - test strategy and patterns
+- [CONTRIBUTING.md](CONTRIBUTING.md) - contribution and dev workflow

@@ -1,0 +1,170 @@
+package analytics
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/peterbourgon/ff/v3/ffcli"
+
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/asc"
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/shared"
+)
+
+// AnalyticsInstancesCommand returns the analytics instances command group.
+func AnalyticsInstancesCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("instances", flag.ExitOnError)
+
+	return &ffcli.Command{
+		Name:       "instances",
+		ShortUsage: "asc analytics instances <subcommand> [flags]",
+		ShortHelp:  "View analytics report instances or relationships.",
+		LongHelp: `View analytics report instances or relationships.
+
+Examples:
+  asc analytics instances view --instance-id "INSTANCE_ID"
+  asc analytics instances links --instance-id "INSTANCE_ID"
+  asc analytics instances links --instance-id "INSTANCE_ID" --paginate`,
+		FlagSet:   fs,
+		UsageFunc: shared.VisibleUsageFunc,
+		Subcommands: []*ffcli.Command{
+			AnalyticsInstancesGetCommand(),
+			AnalyticsInstancesRelationshipsCommand(),
+		},
+		Exec: func(ctx context.Context, args []string) error {
+			return flag.ErrHelp
+		},
+	}
+}
+
+// AnalyticsInstancesGetCommand retrieves a specific analytics report instance.
+func AnalyticsInstancesGetCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("view", flag.ExitOnError)
+
+	instanceID := fs.String("instance-id", "", "Analytics report instance ID")
+	output := shared.BindOutputFlags(fs)
+
+	return &ffcli.Command{
+		Name:       "view",
+		ShortUsage: "asc analytics instances view --instance-id \"INSTANCE_ID\" [flags]",
+		ShortHelp:  "View an analytics report instance by ID.",
+		LongHelp: `View an analytics report instance by ID.
+
+Examples:
+  asc analytics instances view --instance-id "INSTANCE_ID"`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			id := strings.TrimSpace(*instanceID)
+			if id == "" {
+				fmt.Fprintln(os.Stderr, "Error: --instance-id is required")
+				return shared.MissingRequiredUsageError("--instance-id")
+			}
+			var err error
+			id, err = asc.ValidateResourcePathSegment(id)
+			if err != nil {
+				return shared.UsageErrorf("analytics instances view: --instance-id: %v", err)
+			}
+
+			client, err := shared.GetASCClient()
+			if err != nil {
+				return fmt.Errorf("analytics instances view: %w", err)
+			}
+
+			requestCtx, cancel := shared.ContextWithTimeout(ctx)
+			defer cancel()
+
+			resp, err := client.GetAnalyticsReportInstance(requestCtx, id)
+			if err != nil {
+				return fmt.Errorf("analytics instances view: failed to fetch: %w", err)
+			}
+
+			return shared.PrintOutput(resp, *output.Output, *output.Pretty)
+		},
+	}
+}
+
+// AnalyticsInstancesRelationshipsCommand lists segment links for an instance.
+func AnalyticsInstancesRelationshipsCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("links", flag.ExitOnError)
+
+	instanceID := fs.String("instance-id", "", "Analytics report instance ID")
+	limit := fs.Int("limit", 0, "Maximum results per page (1-200)")
+	next := fs.String("next", "", "Fetch next page using a links.next URL")
+	paginate := fs.Bool("paginate", false, "Automatically fetch all pages (aggregate results)")
+	output := shared.BindOutputFlags(fs)
+
+	return &ffcli.Command{
+		Name:       "links",
+		ShortUsage: "asc analytics instances links --instance-id \"INSTANCE_ID\" [flags]",
+		ShortHelp:  "List analytics report segment relationships.",
+		LongHelp: `List analytics report segment relationships.
+
+Examples:
+  asc analytics instances links --instance-id "INSTANCE_ID"
+  asc analytics instances links --instance-id "INSTANCE_ID" --paginate`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			if *limit != 0 && (*limit < 1 || *limit > analyticsMaxLimit) {
+				return shared.UsageError("analytics instances links: --limit must be between 1 and 200")
+			}
+			if err := shared.ValidateNextURL(*next); err != nil {
+				return shared.UsageErrorf("analytics instances links: %v", err)
+			}
+
+			id := strings.TrimSpace(*instanceID)
+			if id == "" && strings.TrimSpace(*next) == "" {
+				fmt.Fprintln(os.Stderr, "Error: --instance-id is required")
+				return shared.MissingRequiredUsageError("--instance-id")
+			}
+			if id != "" {
+				var err error
+				id, err = asc.ValidateResourcePathSegment(id)
+				if err != nil {
+					return shared.UsageErrorf("analytics instances links: --instance-id: %v", err)
+				}
+			}
+
+			client, err := shared.GetASCClient()
+			if err != nil {
+				return fmt.Errorf("analytics instances links: %w", err)
+			}
+
+			requestCtx, cancel := shared.ContextWithTimeout(ctx)
+			defer cancel()
+
+			opts := []asc.LinkagesOption{
+				asc.WithLinkagesLimit(*limit),
+				asc.WithLinkagesNextURL(*next),
+			}
+
+			if *paginate {
+				paginateOpts := append(opts, asc.WithLinkagesLimit(analyticsMaxLimit))
+				resp, err := shared.PaginateWithSpinner(
+					requestCtx,
+					func(ctx context.Context) (asc.PaginatedResponse, error) {
+						return client.GetAnalyticsReportInstanceSegmentsRelationships(ctx, id, paginateOpts...)
+					},
+					func(ctx context.Context, nextURL string) (asc.PaginatedResponse, error) {
+						return client.GetAnalyticsReportInstanceSegmentsRelationships(ctx, id, asc.WithLinkagesNextURL(nextURL))
+					},
+				)
+				if err != nil {
+					return fmt.Errorf("analytics instances links: %w", err)
+				}
+
+				return shared.PrintOutput(resp, *output.Output, *output.Pretty)
+			}
+
+			resp, err := client.GetAnalyticsReportInstanceSegmentsRelationships(requestCtx, id, opts...)
+			if err != nil {
+				return fmt.Errorf("analytics instances links: failed to fetch: %w", err)
+			}
+
+			return shared.PrintOutput(resp, *output.Output, *output.Pretty)
+		},
+	}
+}

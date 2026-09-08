@@ -1,0 +1,78 @@
+package screenshots
+
+import (
+	"context"
+	"flag"
+
+	"github.com/peterbourgon/ff/v3/ffcli"
+
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/assets"
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/shared"
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/shots"
+)
+
+// ScreenshotsCommand returns the top-level screenshots command.
+func ScreenshotsCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("screenshots", flag.ExitOnError)
+
+	return &ffcli.Command{
+		Name:       "screenshots",
+		ShortUsage: "asc screenshots <subcommand> [flags]",
+		ShortHelp:  "Upload and manage App Store screenshots, including local capture, framing, and matrices.",
+		LongHelp: `Manage the full screenshot workflow from local capture to App Store upload.
+
+If you face issues, please file feedback at:
+https://github.com/Izaiaspertrelly/apple-store-cli/issues/new/choose
+
+Local workflow:
+  asc screenshots run --plan .asc/screenshots.json
+  asc screenshots matrix --plan .asc/screenshots-matrix.json
+  asc screenshots capture --bundle-id "com.example.app" --name home
+  asc screenshots frame --input ./screenshots/raw/home.png --device iphone-air
+  asc screenshots review-generate --framed-dir ./screenshots/framed
+  asc screenshots review-open --output-dir ./screenshots/review
+  asc screenshots review-approve --all-ready --output-dir ./screenshots/review
+  asc screenshots plan --app "123456789" --version "1.2.3"
+  asc screenshots apply --app "123456789" --version "1.2.3" --confirm
+  asc screenshots list-frame-devices --output json
+
+App Store workflow:
+  asc screenshots list --version-localization "VERSION_LOCALIZATION_ID"
+  asc screenshots list --version-id "VERSION_ID" --locale "en-US"
+  asc screenshots sizes
+  asc screenshots sizes --all
+  asc screenshots validate --path "./screenshots/iphone" --device-type "IPHONE_65"
+  asc screenshots upload --version-localization "VERSION_LOCALIZATION_ID" --path "./screenshots/iphone" --device-type "IPHONE_65"
+  asc screenshots upload --app "123456789" --version "1.2.3" --path "./screenshots" --device-type "IPHONE_65"
+  asc screenshots upload --version-localization "VERSION_LOCALIZATION_ID" --path "./screenshots/ipad" --device-type "IPAD_PRO_3GEN_129"
+  asc screenshots download --version-localization "VERSION_LOCALIZATION_ID" --output-dir "./screenshots/downloaded"
+  asc screenshots delete --id "SCREENSHOT_ID" --confirm
+
+For most iOS submissions, one iPhone set (IPHONE_65) and one iPad set
+(IPAD_PRO_3GEN_129) are enough. "asc screenshots sizes" focuses on these by
+default; use --all only when you need the full matrix.`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Subcommands: []*ffcli.Command{
+			shots.ShotsRunCommand(),
+			shots.ShotsMatrixCommand(),
+			shots.ShotsCaptureCommand(),
+			shots.ShotsFrameCommand(),
+			shots.ShotsFramesListDevicesCommand(),
+			shots.ShotsReviewGenerateCommand(),
+			shots.ShotsReviewOpenCommand(),
+			shots.ShotsReviewApproveCommand(),
+			assets.AssetsScreenshotsPlanCommand(),
+			assets.AssetsScreenshotsApplyCommand(),
+			assets.AssetsScreenshotsListCommand(),
+			assets.AssetsScreenshotsSizesCommand(),
+			assets.AssetsScreenshotsValidateCommand(),
+			assets.AssetsScreenshotsUploadCommand(),
+			assets.AssetsScreenshotsDownloadCommand(),
+			assets.AssetsScreenshotsDeleteCommand(),
+		},
+		Exec: func(ctx context.Context, args []string) error {
+			return flag.ErrHelp
+		},
+	}
+}

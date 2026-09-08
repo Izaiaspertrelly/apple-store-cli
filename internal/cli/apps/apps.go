@@ -1,0 +1,451 @@
+package apps
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"os"
+	"strings"
+
+	"github.com/peterbourgon/ff/v3/ffcli"
+
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/asc"
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/shared"
+)
+
+func appsListFlags(fs *flag.FlagSet) (output shared.OutputFlags, bundleID *string, name *string, sku *string, versionState *string, reviewSubmissionState *string, sort *string, limit *int, next *string, paginate *bool, appInfoFields *string, iapFields *string, subscriptionGroupFields *string) {
+	output = shared.BindOutputFlags(fs)
+	bundleID = fs.String("bundle-id", "", "Filter by bundle ID(s), comma-separated")
+	name = fs.String("name", "", "Filter by app name(s), comma-separated")
+	sku = fs.String("sku", "", "Filter by SKU(s), comma-separated")
+	versionState = fs.String("version-state", "", "Filter by App Store version state(s), comma-separated: "+strings.Join(appVersionStateFilterList(), ", "))
+	reviewSubmissionState = fs.String("review-submission-state", "", "Filter by review submission state(s), comma-separated: "+strings.Join(reviewSubmissionStateFilterList(), ", "))
+	sort = fs.String("sort", "", "Sort by name, -name, bundleId, -bundleId, sku, or -sku")
+	limit = fs.Int("limit", 0, "Maximum results per page (1-200)")
+	next = fs.String("next", "", "Fetch next page using a links.next URL")
+	paginate = fs.Bool("paginate", false, "Automatically fetch all pages (aggregate results)")
+	appInfoFields = fs.String("app-info-fields", "", "Sparse fields for included app info records: kidsAgeBand (deprecated by Apple; prefer asc age-rating view)")
+	iapFields = fs.String("iap-fields", "", "Sparse fields for included in-app purchases: versions")
+	subscriptionGroupFields = fs.String("subscription-group-fields", "", "Sparse fields for included subscription groups: versions")
+	return
+}
+
+// AppsCommand returns the apps command factory.
+func AppsCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("apps", flag.ExitOnError)
+
+	output, bundleID, name, sku, versionState, reviewSubmissionState, sort, limit, next, paginate, appInfoFields, iapFields, subscriptionGroupFields := appsListFlags(fs)
+	subcommands := []*ffcli.Command{
+		AppsListCommand(),
+		AppsPublishedCommand(),
+		AppsWallCommand(),
+		AppsPublicCommand(),
+		AppsRegistryCommand(),
+		AppsGetCommand(),
+		AppsRenameCommand(),
+		AppsInfoCommand(),
+		AppsCIProductCommand(),
+		AppsUpdateCommand(),
+		AppsRemoveBetaTestersCommand(),
+		AppsSubscriptionGracePeriodCommand(),
+		AppsSearchKeywordsCommand(),
+		AppEncryptionDeclarationsCommand(),
+		AppsContentRightsCommand(),
+	}
+	for _, subcommand := range subcommands {
+		rejectAppsListFlagsBeforeSubcommand(fs, subcommand)
+	}
+
+	return &ffcli.Command{
+		Name:       "apps",
+		ShortUsage: "asc apps <subcommand> [flags]",
+		ShortHelp:  "List and manage apps in App Store Connect.",
+		LongHelp: `List and manage apps in App Store Connect.
+
+Creating an app record runs through a web session, not this command group:
+  asc web apps create --name "My App" --bundle-id "com.example.app" --sku "MYAPP123"
+
+Examples:
+  asc apps
+  asc apps list --bundle-id "com.example.app"
+  asc apps published
+  asc apps wall
+  asc apps wall submit --app "1234567890" --confirm
+  asc apps public view --app "1234567890"
+  asc apps public search --term "focus" --country us
+  asc apps public rank --app "1234567890" --term "focus timer" --country us --platform TV_OS
+  asc apps public storefronts list
+  asc apps registry pull --path ".asc/app-registry.json"
+  asc apps view --id "APP_ID"
+  asc apps rename --app "APP_ID" --locale "en-US" --name "New Name"
+  asc apps info view --app "APP_ID"
+  asc apps info edit --app "APP_ID" --locale "en-US" --whats-new "Bug fixes"
+  asc apps ci-product view --id "APP_ID"
+  asc apps update --id "APP_ID" --bundle-id "com.example.app"
+  asc apps update --id "APP_ID" --primary-locale "en-US"
+  asc apps subscription-grace-period view --app "APP_ID"
+  asc apps content-rights edit --app "APP_ID" --uses-third-party-content=false
+  asc apps --limit 10
+  asc apps --sort name
+  asc apps --sort sku
+  asc apps --version-state IN_REVIEW,WAITING_FOR_REVIEW
+  asc apps --review-submission-state IN_REVIEW
+  asc apps --app-info-fields kidsAgeBand --iap-fields versions --subscription-group-fields versions
+  asc apps --output table
+  asc apps --next "<links.next>"
+  asc apps --paginate`,
+		FlagSet:     fs,
+		UsageFunc:   shared.VisibleUsageFunc,
+		Subcommands: subcommands,
+		Exec: func(ctx context.Context, args []string) error {
+			if len(args) > 0 {
+				subcommand := strings.TrimSpace(args[0])
+				if subcommand == "create" {
+					fmt.Fprintln(os.Stderr, "Error: `asc apps create` was removed. Use `asc web apps create` instead.")
+					return flag.ErrHelp
+				}
+				fmt.Fprintf(os.Stderr, "Error: unknown subcommand %q\n", subcommand)
+				return flag.ErrHelp
+			}
+			return appsList(ctx, fs, *output.Output, *output.Pretty, *bundleID, *name, *sku, *versionState, *reviewSubmissionState, *sort, *limit, *next, *paginate, *appInfoFields, *iapFields, *subscriptionGroupFields)
+		},
+	}
+}
+
+var appsListOnlyFlagNames = []string{
+	"bundle-id", "name", "sku", "version-state", "review-submission-state",
+	"sort", "limit", "next", "paginate", "app-info-fields", "iap-fields",
+	"subscription-group-fields",
+}
+
+// rejectAppsListFlagsBeforeSubcommand prevents ffcli from accepting a parent
+// list flag and then silently dropping it when dispatching to a child command.
+// Direct `asc apps [flags]` listing remains supported; subcommand flags belong
+// after `list` so the selected command owns their values and validation.
+func rejectAppsListFlagsBeforeSubcommand(parentFS *flag.FlagSet, command *ffcli.Command) {
+	if command == nil {
+		return
+	}
+	if command.Exec != nil {
+		exec := command.Exec
+		command.Exec = func(ctx context.Context, args []string) error {
+			if flagName, ok := appFlagWasProvided(parentFS, appsListOnlyFlagNames...); ok {
+				return shared.UsageErrorf("%s cannot be placed before an apps subcommand; use asc apps [flags] or place it after asc apps list", flagName)
+			}
+			return exec(ctx, args)
+		}
+	}
+	for _, subcommand := range command.Subcommands {
+		rejectAppsListFlagsBeforeSubcommand(parentFS, subcommand)
+	}
+}
+
+// AppsListCommand returns the apps list subcommand.
+func AppsListCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("apps list", flag.ExitOnError)
+
+	output, bundleID, name, sku, versionState, reviewSubmissionState, sort, limit, next, paginate, appInfoFields, iapFields, subscriptionGroupFields := appsListFlags(fs)
+
+	return &ffcli.Command{
+		Name:       "list",
+		ShortUsage: "asc apps list [flags]",
+		ShortHelp:  "List apps from App Store Connect.",
+		LongHelp: `List apps from App Store Connect.
+
+Examples:
+  asc apps list
+  asc apps list --bundle-id "com.example.app"
+  asc apps list --name "My App"
+  asc apps list --limit 10
+  asc apps list --sort name
+  asc apps list --sort sku
+  asc apps list --version-state IN_REVIEW,WAITING_FOR_REVIEW
+  asc apps list --review-submission-state IN_REVIEW
+  asc apps list --app-info-fields kidsAgeBand --iap-fields versions --subscription-group-fields versions
+  asc apps list --output table
+  asc apps list --next "<links.next>"
+  asc apps list --paginate`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			return appsList(ctx, fs, *output.Output, *output.Pretty, *bundleID, *name, *sku, *versionState, *reviewSubmissionState, *sort, *limit, *next, *paginate, *appInfoFields, *iapFields, *subscriptionGroupFields)
+		},
+	}
+}
+
+// AppsGetCommand returns the apps view subcommand.
+func AppsGetCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("apps view", flag.ExitOnError)
+
+	id := fs.String("id", "", "App Store Connect app ID")
+	appInfoFields := fs.String("app-info-fields", "", "Sparse fields for included app info records: kidsAgeBand (deprecated by Apple; prefer asc age-rating view)")
+	iapFields := fs.String("iap-fields", "", "Sparse fields for included in-app purchases: versions")
+	subscriptionGroupFields := fs.String("subscription-group-fields", "", "Sparse fields for included subscription groups: versions")
+	output := shared.BindOutputFlags(fs)
+
+	return &ffcli.Command{
+		Name:       "view",
+		ShortUsage: "asc apps view --id APP_ID",
+		ShortHelp:  "View app details by ID.",
+		LongHelp: `View app details by ID.
+
+Examples:
+  asc apps view --id "APP_ID"
+  asc apps view --id "APP_ID" --app-info-fields kidsAgeBand --iap-fields versions --subscription-group-fields versions
+  asc apps view --id "APP_ID" --output table`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			idValue := strings.TrimSpace(*id)
+			if idValue == "" {
+				fmt.Fprintln(os.Stderr, "Error: --id is required")
+				return shared.MissingRequiredUsageError("--id")
+			}
+			appInfoFieldValues, err := normalizeSparseField(fs, *appInfoFields, appInfoSparseFields441, "--app-info-fields")
+			if err != nil {
+				return shared.UsageError(err.Error())
+			}
+			iapFieldValues, err := normalizeSparseField(fs, *iapFields, appInAppPurchaseSparseFields441, "--iap-fields")
+			if err != nil {
+				return shared.UsageError(err.Error())
+			}
+			groupFieldValues, err := normalizeSparseField(fs, *subscriptionGroupFields, appSubscriptionGroupSparseFields441, "--subscription-group-fields")
+			if err != nil {
+				return shared.UsageError(err.Error())
+			}
+
+			client, err := shared.GetASCClient()
+			if err != nil {
+				return fmt.Errorf("apps view: %w", err)
+			}
+
+			requestCtx, cancel := shared.ContextWithTimeout(ctx)
+			defer cancel()
+
+			includeValues := []string{}
+			if len(appInfoFieldValues) > 0 {
+				includeValues = addInclude(includeValues, "appInfos")
+			}
+			if len(iapFieldValues) > 0 {
+				includeValues = addInclude(includeValues, "inAppPurchases")
+			}
+			if len(groupFieldValues) > 0 {
+				includeValues = addInclude(includeValues, "subscriptionGroups")
+			}
+			opts := []asc.AppOption{
+				asc.WithAppAppInfoFields(appInfoFieldValues),
+				asc.WithAppInAppPurchaseFields(iapFieldValues),
+				asc.WithAppSubscriptionGroupFields(groupFieldValues),
+				asc.WithAppInclude(includeValues),
+			}
+			app, err := client.GetAppWithOptions(requestCtx, idValue, opts...)
+			if err != nil {
+				return fmt.Errorf("apps view: failed to fetch: %w", err)
+			}
+
+			return shared.PrintOutput(app, *output.Output, *output.Pretty)
+		},
+	}
+}
+
+// AppsUpdateCommand returns the apps update subcommand.
+func AppsUpdateCommand() *ffcli.Command {
+	fs := flag.NewFlagSet("apps update", flag.ExitOnError)
+
+	id := fs.String("id", "", "App Store Connect app ID")
+	bundleID := fs.String("bundle-id", "", "Update bundle ID")
+	primaryLocale := fs.String("primary-locale", "", "Update primary locale (e.g., en-US)")
+	contentRights := fs.String("content-rights", "", "Content rights declaration: DOES_NOT_USE_THIRD_PARTY_CONTENT or USES_THIRD_PARTY_CONTENT")
+	output := shared.BindOutputFlags(fs)
+
+	return &ffcli.Command{
+		Name:       "update",
+		ShortUsage: "asc apps update --id APP_ID [--bundle-id BUNDLE_ID] [--primary-locale LOCALE] [--content-rights DECLARATION]",
+		ShortHelp:  "Update an app's bundle ID, primary locale, or content rights declaration.",
+		LongHelp: `Update an app's bundle ID, primary locale, or content rights declaration.
+
+Examples:
+  asc apps update --id "APP_ID" --bundle-id "com.example.app"
+  asc apps update --id "APP_ID" --primary-locale "en-US"
+  asc apps update --id "APP_ID" --content-rights "DOES_NOT_USE_THIRD_PARTY_CONTENT"`,
+		FlagSet:   fs,
+		UsageFunc: shared.DefaultUsageFunc,
+		Exec: func(ctx context.Context, args []string) error {
+			idValue := strings.TrimSpace(*id)
+			if idValue == "" {
+				fmt.Fprintln(os.Stderr, "Error: --id is required")
+				return shared.MissingRequiredUsageError("--id")
+			}
+
+			attrs := asc.AppUpdateAttributes{}
+			if bundleValue := strings.TrimSpace(*bundleID); bundleValue != "" {
+				attrs.BundleID = &bundleValue
+			}
+			if localeValue := strings.TrimSpace(*primaryLocale); localeValue != "" {
+				attrs.PrimaryLocale = &localeValue
+			}
+			if rightsValue := strings.TrimSpace(*contentRights); rightsValue != "" {
+				normalizedRights := asc.ContentRightsDeclaration(strings.ToUpper(rightsValue))
+				switch normalizedRights {
+				case asc.ContentRightsDeclarationDoesNotUseThirdPartyContent,
+					asc.ContentRightsDeclarationUsesThirdPartyContent:
+					attrs.ContentRightsDeclaration = &normalizedRights
+				default:
+					fmt.Fprintf(os.Stderr, "Error: --content-rights must be %s or %s\n", asc.ContentRightsDeclarationDoesNotUseThirdPartyContent, asc.ContentRightsDeclarationUsesThirdPartyContent)
+					return flag.ErrHelp
+				}
+			}
+			if attrs.BundleID == nil && attrs.PrimaryLocale == nil && attrs.ContentRightsDeclaration == nil {
+				fmt.Fprintln(os.Stderr, "Error: --bundle-id, --primary-locale, or --content-rights is required")
+				return shared.MissingRequiredUsageError("")
+			}
+
+			client, err := shared.GetASCClient()
+			if err != nil {
+				return fmt.Errorf("apps update: %w", err)
+			}
+
+			requestCtx, cancel := shared.ContextWithTimeout(ctx)
+			defer cancel()
+
+			app, err := client.UpdateApp(requestCtx, idValue, attrs)
+			if err != nil {
+				return fmt.Errorf("apps update: failed to update: %w", err)
+			}
+
+			return shared.PrintOutput(app, *output.Output, *output.Pretty)
+		},
+	}
+}
+
+func appsList(ctx context.Context, fs *flag.FlagSet, output string, pretty bool, bundleID string, name string, sku string, versionState string, reviewSubmissionState string, sort string, limit int, next string, paginate bool, appInfoFields string, iapFields string, subscriptionGroupFields string) error {
+	if limit != 0 && (limit < 1 || limit > 200) {
+		return shared.UsageErrorf("apps: --limit must be between 1 and 200")
+	}
+	if err := shared.ValidateNextURL(next); err != nil {
+		return shared.UsageErrorf("apps: %v", err)
+	}
+	if err := shared.ValidateSort(sort, "name", "-name", "bundleId", "-bundleId", "sku", "-sku"); err != nil {
+		return shared.UsageErrorf("apps: %v", err)
+	}
+	if strings.TrimSpace(next) != "" {
+		if flagName, ok := appFlagWasProvided(
+			fs,
+			"bundle-id", "name", "sku", "version-state", "review-submission-state", "sort", "limit",
+			"app-info-fields", "iap-fields", "subscription-group-fields",
+		); ok {
+			return shared.WithDiagnostic(
+				shared.UsageErrorf("--next cannot be combined with %s", flagName),
+				shared.DiagnosticConflictingInput,
+				flagName,
+			)
+		}
+	}
+	versionStateValues := shared.SplitCSVUpper(versionState)
+	if _, provided := appFlagWasProvided(fs, "version-state"); provided {
+		if strings.TrimSpace(versionState) == "" {
+			return shared.UsageError("--version-state must not be empty")
+		}
+		if csvContainsEmptyValue(versionState) {
+			return shared.UsageError("--version-state must not contain empty values")
+		}
+	}
+	versionStateValues, err := normalizeAppVersionStateFilters(versionStateValues)
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
+	reviewSubmissionStateValues := shared.SplitCSVUpper(reviewSubmissionState)
+	if _, provided := appFlagWasProvided(fs, "review-submission-state"); provided {
+		if strings.TrimSpace(reviewSubmissionState) == "" {
+			return shared.UsageError("--review-submission-state must not be empty")
+		}
+		if csvContainsEmptyValue(reviewSubmissionState) {
+			return shared.UsageError("--review-submission-state must not contain empty values")
+		}
+	}
+	reviewSubmissionStateValues, err = normalizeReviewSubmissionStateFilters(reviewSubmissionStateValues)
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
+	appInfoFieldValues, err := normalizeSparseField(fs, appInfoFields, appInfoSparseFields441, "--app-info-fields")
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
+	iapFieldValues, err := normalizeSparseField(fs, iapFields, appInAppPurchaseSparseFields441, "--iap-fields")
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
+	groupFieldValues, err := normalizeSparseField(fs, subscriptionGroupFields, appSubscriptionGroupSparseFields441, "--subscription-group-fields")
+	if err != nil {
+		return shared.UsageError(err.Error())
+	}
+
+	client, err := shared.GetASCClient()
+	if err != nil {
+		return fmt.Errorf("apps: %w", err)
+	}
+
+	requestCtx, cancel := shared.ContextWithTimeout(ctx)
+	defer cancel()
+
+	opts := []asc.AppsOption{
+		asc.WithAppsBundleIDs(shared.SplitCSV(bundleID)),
+		asc.WithAppsNames(shared.SplitCSV(name)),
+		asc.WithAppsSKUs(shared.SplitCSV(sku)),
+		asc.WithAppsVersionStates(versionStateValues),
+		asc.WithAppsReviewSubmissionStates(reviewSubmissionStateValues),
+		asc.WithAppsLimit(limit),
+		asc.WithAppsNextURL(next),
+		asc.WithAppsAppInfoFields(appInfoFieldValues),
+		asc.WithAppsInAppPurchaseFields(iapFieldValues),
+		asc.WithAppsSubscriptionGroupFields(groupFieldValues),
+	}
+	includeValues := []string{}
+	if len(appInfoFieldValues) > 0 {
+		includeValues = addInclude(includeValues, "appInfos")
+	}
+	if len(iapFieldValues) > 0 {
+		includeValues = addInclude(includeValues, "inAppPurchases")
+	}
+	if len(groupFieldValues) > 0 {
+		includeValues = addInclude(includeValues, "subscriptionGroups")
+	}
+	opts = append(opts, asc.WithAppsInclude(includeValues))
+	if strings.TrimSpace(sort) != "" {
+		opts = append(opts, asc.WithAppsSort(sort))
+	}
+
+	if paginate {
+		paginateOpts := append(opts, asc.WithAppsLimit(200))
+		apps, err := shared.PaginateWithSpinner(
+			requestCtx,
+			func(ctx context.Context) (asc.PaginatedResponse, error) {
+				return client.GetApps(ctx, paginateOpts...)
+			},
+			func(ctx context.Context, nextURL string) (asc.PaginatedResponse, error) {
+				return client.GetApps(ctx, asc.WithAppsNextURL(nextURL))
+			},
+		)
+		if err != nil {
+			return fmt.Errorf("apps: %w", err)
+		}
+
+		return shared.PrintOutput(apps, output, pretty)
+	}
+
+	apps, err := client.GetApps(requestCtx, opts...)
+	if err != nil {
+		return fmt.Errorf("apps: failed to fetch: %w", err)
+	}
+
+	return shared.PrintOutput(apps, output, pretty)
+}
+
+func csvContainsEmptyValue(value string) bool {
+	for _, element := range strings.Split(value, ",") {
+		if strings.TrimSpace(element) == "" {
+			return true
+		}
+	}
+	return false
+}
