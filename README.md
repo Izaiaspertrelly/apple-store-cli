@@ -127,14 +127,18 @@ asc publish appstore --app "123456789" --ipa "/caminho/para/MeuApp.ipa" --versio
 asc status --app "123456789" --watch
 ```
 
-Validação antes do envio:
+Validação antes do envio (o app passaria na review?):
 
 ```bash
-asc validate --app "123456789" --version "1.2.3"
+asc validate --app "123456789"
 asc validate --app "123456789" --version "1.2.3" --strict
+asc validate --app "123456789" --version "1.2.3" --ipa "./MeuApp.ipa"
+asc validate --app "123456789" --version "1.2.3" --deep
 asc review status --app "123456789"
 asc review doctor --app "123456789"
 ```
+
+`asc validate` devolve um relatório de prontidão com um plano de correção em ordem: o primeiro item é o próximo a ajustar. Ele confere limites e placeholders de metadados, campos e localizações obrigatórios, dados de review completos, categoria, build anexado e processado, declaração de criptografia, direitos de conteúdo, preço no território base (Free conta), disponibilidade, screenshots e tamanhos, classificação etária e prontidão de assinaturas. Sem `--version`, ele escolhe a versão editável mais nova. Com `--ipa`, ele lê o `UIDeviceFamily` do build e bloqueia o envio se o app roda em iPad e faltam screenshots de iPad. Com `--deep`, ele usa a sessão web já salva para checar App Privacy, contratos e a primeira assinatura, e diz se cada problema se corrige pela API, pela web ou à mão.
 
 ### Metadados e localização
 
@@ -174,6 +178,16 @@ asc --help
 asc <comando> --help
 asc <comando> <subcomando> --help
 ```
+
+## Skills para agentes
+
+O `asc` instala globalmente as skills de fluxo da App Store Connect, para o seu agente usar em qualquer projeto:
+
+```bash
+asc install-skills
+```
+
+O comando baixa o commit revisado `f52c4f04323bb2dfb21ca8be82e6494e9cd0b4d8` do repositório [rorkai/app-store-connect-cli-skills](https://github.com/rorkai/app-store-connect-cli-skills) e copia as 25 skills para a pasta global de skills do agente. Ele confere o pacote inteiro e cada arquivo instalado antes de concluir, preserva skills que não são dele e só precisa do `git`.
 
 ## Privacidade
 

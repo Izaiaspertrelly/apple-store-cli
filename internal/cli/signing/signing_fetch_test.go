@@ -298,7 +298,7 @@ func TestSigningFetchFormatUsesSharedOutputDefault(t *testing.T) {
 
 func TestSigningOutputPathsCoverProfileAndCertificateFiles(t *testing.T) {
 	dir := filepath.Join("tmp", "signing")
-	paths := signingOutputPaths(dir, "Created Profile", "profile-created", []asc.Resource[asc.CertificateAttributes]{
+	paths := signingOutputPaths(dir, "Created Profile", "profile-created", "IOS_APP_STORE", []asc.Resource[asc.CertificateAttributes]{
 		{ID: "cert-1", Attributes: asc.CertificateAttributes{SerialNumber: "CERT1"}},
 		{ID: "cert-2", Attributes: asc.CertificateAttributes{}},
 	})
@@ -310,6 +310,12 @@ func TestSigningOutputPathsCoverProfileAndCertificateFiles(t *testing.T) {
 	}
 	if strings.Join(paths, ",") != strings.Join(want, ",") {
 		t.Fatalf("signingOutputPaths() = %v, want %v", paths, want)
+	}
+
+	macPaths := signingOutputPaths(dir, "Created Profile", "profile-created", "MAC_APP_STORE", nil)
+	macWant := []string{filepath.Join(dir, "Created Profile.provisionprofile")}
+	if strings.Join(macPaths, ",") != strings.Join(macWant, ",") {
+		t.Fatalf("signingOutputPaths() for macOS = %v, want %v", macPaths, macWant)
 	}
 }
 
@@ -338,6 +344,29 @@ func TestEnsureOutputPathsAreFreeReportsCollisions(t *testing.T) {
 		if !strings.Contains(err.Error(), path) {
 			t.Fatalf("ensureOutputPathsAreFree(%q) error = %v, want the colliding path named", path, err)
 		}
+	}
+}
+
+func TestEnsureOutputPathsAreFreeValidatesParentsAndDistinctPaths(t *testing.T) {
+	dir := t.TempDir()
+
+	missingParent := filepath.Join(dir, "missing", "identity.p12")
+	if err := ensureOutputPathsAreFree([]string{missingParent}); err == nil || !strings.Contains(err.Error(), "parent") {
+		t.Fatalf("missing parent error = %v, want parent validation failure", err)
+	}
+
+	parentFile := filepath.Join(dir, "not-a-directory")
+	if err := os.WriteFile(parentFile, []byte("file"), 0o600); err != nil {
+		t.Fatalf("write parent file: %v", err)
+	}
+	nonDirectoryParent := filepath.Join(parentFile, "identity.p12")
+	if err := ensureOutputPathsAreFree([]string{nonDirectoryParent}); err == nil || !strings.Contains(err.Error(), "not a directory") {
+		t.Fatalf("non-directory parent error = %v, want type validation failure", err)
+	}
+
+	duplicate := filepath.Join(dir, "duplicate.p12")
+	if err := ensureOutputPathsAreFree([]string{duplicate, duplicate}); err == nil || !strings.Contains(err.Error(), "distinct") {
+		t.Fatalf("duplicate path error = %v, want distinct-path validation failure", err)
 	}
 }
 

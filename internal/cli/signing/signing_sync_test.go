@@ -269,7 +269,8 @@ func TestSigningSyncCaseCollisionFailsBeforeProfileCreatePOST(t *testing.T) {
 			if err := os.WriteFile(path, []byte("existing"), 0o600); err != nil {
 				return err
 			}
-			planned := signingAssetRepositoryPaths(plan.Certificates, "IOS_APP_ADHOC", plan.ProfileName, "profile", nil)
+			profilePath := filepath.Join("profiles", profileDirectoryName("IOS_APP_ADHOC"), safeFileName(plan.ProfileName, "profile")+shared.ProvisioningProfileExtension("", "IOS_APP_ADHOC"))
+			planned := signingAssetRepositoryPathsForProfile(plan.Certificates, "IOS_APP_ADHOC", profilePath, nil)
 			return store.CheckEncryptedRepositoryPaths(planned)
 		},
 	})
@@ -1019,6 +1020,18 @@ func TestSigningSyncPushRejectsIdentityFlagConflictsBeforeSecretsOrClient(t *tes
 			name: "private key without fingerprint",
 			args: []string{"--private-key", "key.pem"},
 			want: "--identity-sha256 is required with --private-key to select one App Store Connect certificate",
+		},
+		{
+			name: "create certificate with identity",
+			args: []string{
+				"--create-missing",
+				"--create-missing-certificate",
+				"--identity",
+				"identity.p12",
+				"--identity-password-file",
+				"password",
+			},
+			want: "--create-missing-certificate cannot be combined with --identity, --private-key, or --identity-sha256",
 		},
 	}
 

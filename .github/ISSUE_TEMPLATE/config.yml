@@ -10,7 +10,7 @@ contact_links:
     url: https://github.com/Izaiaspertrelly/apple-store-cli/blob/main/SUPPORT.md
     about: See when to use Discussions vs Issues and what to include in a bug report
   - name: asc skills
-    url: https://github.com/IzaiasIzaiaspertrelly/apple-store-cli-skills
+    url: https://github.com/rorkai/app-store-connect-cli-skills
     about: Agent skills to automate asc workflows
   - name: Documentation
     url: .

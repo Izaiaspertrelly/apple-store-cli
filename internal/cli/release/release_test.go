@@ -110,14 +110,25 @@ func newReleaseTestServerClient(t *testing.T, handler http.Handler) (*asc.Client
 	return client, server.URL
 }
 
-// releaseBuildAppLinkageResponse answers the build ownership precondition read
-// the pipeline performs before any mutation, for the BUILD_123/APP_123 fixture
-// pair the pipeline tests share.
+// releaseBuildAppLinkageResponse answers the build ownership and platform
+// preconditions the pipeline performs before any mutation, for the
+// BUILD_123/APP_123 fixture pair the pipeline tests share.
 func releaseBuildAppLinkageResponse(req *http.Request) (*http.Response, bool) {
-	if req.Method != http.MethodGet || req.URL.Path != "/v1/builds/BUILD_123/relationships/app" {
+	if req.Method != http.MethodGet {
 		return nil, false
 	}
-	resp, err := releaseJSONResponse(http.StatusOK, `{"data":{"type":"apps","id":"APP_123"}}`)
+
+	var body string
+	switch req.URL.Path {
+	case "/v1/builds/BUILD_123/relationships/app":
+		body = `{"data":{"type":"apps","id":"APP_123"}}`
+	case "/v1/builds/BUILD_123/preReleaseVersion":
+		body = `{"data":{"type":"preReleaseVersions","id":"PRE_RELEASE_123","attributes":{"version":"2.4.0","platform":"IOS"}}}`
+	default:
+		return nil, false
+	}
+
+	resp, err := releaseJSONResponse(http.StatusOK, body)
 	if err != nil {
 		return nil, false
 	}
@@ -804,6 +815,51 @@ func TestExecuteStage_SuccessPath(t *testing.T) {
 	}
 	if result.Steps[4].Message != "readiness checks passed with 1 advisory; App Privacy may still block submission" {
 		t.Fatalf("expected readiness advisory message, got %q", result.Steps[4].Message)
+	}
+}
+
+func TestExecuteStageRejectsIncompleteVersionBeforeMetadata(t *testing.T) {
+	originalClientFactory := releaseClientFactory
+	originalMetadataExecutor := metadataPushExecutor
+	originalReadinessBuilder := readinessReportBuilder
+	originalTransport := http.DefaultTransport
+	t.Cleanup(func() {
+		releaseClientFactory = originalClientFactory
+		metadataPushExecutor = originalMetadataExecutor
+		readinessReportBuilder = originalReadinessBuilder
+		http.DefaultTransport = originalTransport
+	})
+
+	metadataPushExecutor = func(context.Context, metadata.PushExecutionOptions) (metadata.PushPlanResult, error) {
+		t.Fatal("metadata must not run after an incomplete version lookup")
+		return metadata.PushPlanResult{}, nil
+	}
+	readinessReportBuilder = func(context.Context, validatecli.ReadinessOptions) (validation.Report, error) {
+		t.Fatal("readiness must not run after an incomplete version lookup")
+		return validation.Report{}, nil
+	}
+	http.DefaultTransport = releaseRoundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if resp, ok := releaseBuildAppLinkageResponse(req); ok {
+			return resp, nil
+		}
+		if req.Method == http.MethodGet && req.URL.Path == "/v1/apps/APP_123/appStoreVersions" {
+			return releaseJSONResponse(http.StatusOK, `{"data":[{"type":"appStoreVersions","id":"VERSION_123","attributes":{"versionString":"2.4.0","platform":"IOS"}}],"links":{"next":"https://api.appstoreconnect.apple.com/v1/apps/APP_123/appStoreVersions?cursor=next"}}`)
+		}
+		return nil, fmt.Errorf("unexpected request: %s %s", req.Method, req.URL.Path)
+	})
+	releaseClientFactory = func() (*asc.Client, error) { return newReleaseTestClient(t), nil }
+
+	result, err := executeStage(context.Background(), runOptions{
+		AppID:          "APP_123",
+		Version:        "2.4.0",
+		BuildID:        "BUILD_123",
+		Platform:       "IOS",
+		Timeout:        releaseRunTimeout,
+		Confirm:        true,
+		CheckpointFile: filepath.Join(t.TempDir(), "stage-checkpoint.json"),
+	})
+	if err == nil || !strings.Contains(err.Error(), "sample matches") {
+		t.Fatalf("expected incomplete-version ambiguity, got result=%+v err=%v", result, err)
 	}
 }
 

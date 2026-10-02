@@ -1,6 +1,6 @@
 ---
 name: sync-asc-skills
-description: Check Izaiaspertrelly/apple-store-cli-skills against the current ASC CLI surface and correct proven drift when authorized. Use for skill-drift questions, post-release syncs, or checks of command, flag, output, auth, and workflow examples.
+description: Check rorkai/app-store-connect-cli-skills against the current ASC CLI surface and correct proven drift when authorized. Use for skill-drift questions, post-release syncs, or checks of command, flag, output, auth, and workflow examples.
 ---
 
 # Synchronize ASC workflow skills
@@ -10,7 +10,7 @@ Drift questions produce a read-only report; update requests authorize proven cor
 ## Establish both sources
 
 1. Resolve the current apple-store-cli source commit and latest released version relevant to the request.
-2. Resolve a clean checkout of `Izaiaspertrelly/apple-store-cli-skills` and read its repository guidance.
+2. Resolve a clean checkout of `rorkai/app-store-connect-cli-skills` and read its repository guidance.
 3. Inventory every skill and identify which commands, flags, environment variables, outputs, or workflows it claims to use.
 4. Run the current CLI's `--help` at each relevant command path. Use `asc search`, `asc schema`, or `asc capabilities` only when their own current help confirms they are appropriate.
 

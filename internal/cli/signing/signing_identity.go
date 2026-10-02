@@ -144,7 +144,20 @@ func selectSigningIdentity(candidates []signingIdentity, fingerprint string) (*s
 	}
 	if requested == "" {
 		if len(candidates) > 1 {
-			return nil, fmt.Errorf("PKCS#12 contains multiple private identities; use --identity-sha256 to select one")
+			identityCandidates := make([]shared.AmbiguousCandidate, 0, len(candidates))
+			for _, candidate := range candidates {
+				label := ""
+				if candidate.Certificate != nil {
+					label = strings.TrimSpace(candidate.Certificate.Subject.CommonName)
+				}
+				identityCandidates = append(identityCandidates, shared.AmbiguousCandidate{ID: candidate.CertificateSHA256, Label: label})
+			}
+			return nil, &shared.AmbiguousSelectionError{
+				Kind:        "PKCS#12 private identity",
+				Description: "the identity file",
+				Flag:        "--identity-sha256",
+				Candidates:  identityCandidates,
+			}
 		}
 		selected := candidates[0]
 		return &selected, nil
@@ -612,13 +625,13 @@ func normalizeIdentityProfileUUID(raw string) (string, error) {
 	return parsed.String(), nil
 }
 
-func signingAssetRepositoryPaths(certificates []asc.Resource[asc.CertificateAttributes], profileType, profileName, profileFallback string, artifacts *signingIdentityArtifacts) []string {
+func signingAssetRepositoryPathsForProfile(certificates []asc.Resource[asc.CertificateAttributes], profileType, profilePath string, artifacts *signingIdentityArtifacts) []string {
 	paths := make([]string, 0, len(certificates)+3)
 	certDir := certDirectoryName(profileType)
 	for _, certificate := range certificates {
 		paths = append(paths, filepath.Join("certs", certDir, safeFileName(certificate.Attributes.SerialNumber, certificate.ID)+".cer"))
 	}
-	paths = append(paths, filepath.Join("profiles", profileDirectoryName(profileType), safeFileName(profileName, profileFallback)+".mobileprovision"))
+	paths = append(paths, profilePath)
 	if artifacts != nil {
 		paths = append(paths, artifacts.IdentityPath, artifacts.BindingPath)
 	}
@@ -626,6 +639,12 @@ func signingAssetRepositoryPaths(certificates []asc.Resource[asc.CertificateAttr
 }
 
 func preflightSigningAssetDestinations(store *signingpkg.GitStore, plan profileCreatePlan, profileType string) error {
+	profileExtension := shared.ProvisioningProfileExtension("", profileType)
+	profilePath := filepath.Join("profiles", profileDirectoryName(profileType), safeFileName(plan.ProfileName, "profile")+profileExtension)
+	return preflightSigningAssetDestinationsForProfile(store, plan, profileType, profilePath)
+}
+
+func preflightSigningAssetDestinationsForProfile(store *signingpkg.GitStore, plan profileCreatePlan, profileType, profilePath string) error {
 	certDir := certDirectoryName(profileType)
 	for _, certificate := range plan.Certificates {
 		relPath := filepath.Join("certs", certDir, safeFileName(certificate.Attributes.SerialNumber, certificate.ID)+".cer")
@@ -633,8 +652,7 @@ func preflightSigningAssetDestinations(store *signingpkg.GitStore, plan profileC
 			return fmt.Errorf("preflight certificate destination: %w", err)
 		}
 	}
-	profileRelPath := filepath.Join("profiles", profileDirectoryName(profileType), safeFileName(plan.ProfileName, "profile")+".mobileprovision")
-	if err := store.CheckWriteEncryptedFile(profileRelPath); err != nil {
+	if err := store.CheckWriteEncryptedFile(profilePath); err != nil {
 		return fmt.Errorf("preflight profile destination: %w", err)
 	}
 	return nil

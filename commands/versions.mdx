@@ -329,6 +329,60 @@ asc versions release --version-id "VERSION_ID" --confirm
 
 ***
 
+### `asc versions rating-reset`
+
+Schedule, inspect, or cancel the overview-rating reset for
+an App Store version. Apple doesn't include this web-session endpoint in its
+published OpenAPI specification, so the resource may change without notice.
+
+The reset affects every country or region for the selected platform when the
+version is released. Written reviews remain visible. After release, the
+previous overview rating can't be restored.
+
+These commands use an authenticated Apple Account web session. Run `asc web
+auth login` first when no valid cached session is available. Use `--apple-id`
+to select a specific cached account and `--provider-id` or
+`--public-provider-id` to select its App Store Connect provider.
+
+View the current request:
+
+```bash  theme={null}
+asc versions rating-reset view --version-id "VERSION_ID"
+```
+
+Schedule a reset:
+
+```bash  theme={null}
+asc versions rating-reset create --version-id "VERSION_ID" --confirm
+```
+
+Cancel it before release:
+
+```bash  theme={null}
+asc versions rating-reset delete --id "RESET_REQUEST_ID" --confirm
+```
+
+The create command returns:
+
+```json  theme={null}
+{
+  "ratingResetRequestId": "RESET_REQUEST_ID",
+  "versionId": "VERSION_ID",
+  "scheduled": true
+}
+```
+
+The delete command returns:
+
+```json  theme={null}
+{
+  "ratingResetRequestId": "RESET_REQUEST_ID",
+  "cancelled": true
+}
+```
+
+***
+
 ## Common Usage Patterns
 
 ### Create a new version and attach a build
@@ -342,6 +396,15 @@ asc versions attach-build --version-id "VERSION_ID" --build-id "BUILD_ID"
 
 ```bash  theme={null}
 asc versions list --app "123456789" --state WAITING_FOR_REVIEW,IN_REVIEW
+```
+
+### Find the live version
+
+App Store Connect reports a live version as `appVersionState` `READY_FOR_DISTRIBUTION`, the deprecated `appStoreState` `READY_FOR_SALE`, or both, and one `--state` filter cannot match both. Replaced versions can still report `READY_FOR_SALE`, so list that state with `--paginate` rather than `--latest`, skip results whose `appVersionState` is present and is not `READY_FOR_DISTRIBUTION`, and keep the newest version left on each platform across both lists.
+
+```bash  theme={null}
+asc versions list --app "123456789" --state READY_FOR_DISTRIBUTION --latest
+asc versions list --app "123456789" --state READY_FOR_SALE --paginate
 ```
 
 ### Update version release type
@@ -366,7 +429,8 @@ asc versions release --version-id "VERSION_ID" --confirm
 * `PENDING_DEVELOPER_RELEASE` - Approved and waiting for developer to release
 * `PROCESSING_FOR_APP_STORE` - Processing for release
 * `PENDING_APPLE_RELEASE` - Pending Apple release
-* `READY_FOR_SALE` - Live on the App Store
+* `READY_FOR_DISTRIBUTION` - Live on the App Store (`appVersionState`)
+* `READY_FOR_SALE` - Live on the App Store (deprecated `appStoreState`; replaced versions can still report it)
 * `REMOVED_FROM_SALE` - Removed from sale
 * `DEVELOPER_REJECTED` - Rejected by developer
 * `REJECTED` - Rejected by Apple

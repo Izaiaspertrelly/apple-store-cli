@@ -88,7 +88,7 @@ workflows. No App Store Connect API 4.4.1 behavior PR remains open:
 | IAP and promoted-purchase related sparse fields | #1793 | `917d719d` | `f6b34d9e` | Merged; exact final head, six resolved threads, and green exact-head gates |
 | Subscription and pricing related sparse fields | #1795 | `229dc07c` | `5bf2d154` | Merged; exact final head landed on `main` |
 | App-info, age-rating, and Xcode Cloud related sparse fields | #1796 | `8b4821a4` | `48e0d003` | Merged and `main`-gated; exact final head, four resolved threads, and green exact-head gates |
-| External ASC workflow skills | Izaiaspertrelly/apple-store-cli-skills#51 and #52 | `1aeb0dc607d8fa327501bc4b1d1cf981448512f9` | `f8f43c29d96a85792b99a8a1f23a7f048f8b312d` | Merged; final cross-repository audit passed 23/23 skills and 695/695 runnable command occurrences; zero review threads |
+| External ASC workflow skills | rorkai/app-store-connect-cli-skills#51 and #52 | `1aeb0dc607d8fa327501bc4b1d1cf981448512f9` | `f8f43c29d96a85792b99a8a1f23a7f048f8b312d` | Merged; final cross-repository audit passed 23/23 skills and 695/695 runnable command occurrences; zero review threads |
 
 The hard audit fixed contract gaps beyond the initial six implementation PRs:
 endpoint-exact fields, includes, sparse fields, and relationship limits; opaque
@@ -844,7 +844,7 @@ documented deprecation window; this goal intentionally stops before release.
     at exact final head `917d719df73a8dce9eefd5f378bad5a0562a67c0`
     and landed on `main` as `f6b34d9e042964673ee39c32fbae4f7aa99fc874`.
 19. External workflow skills were first audited through
-    Izaiaspertrelly/apple-store-cli-skills#51 at exact head
+    rorkai/app-store-connect-cli-skills#51 at exact head
     `d7888b2b4a1a152f8524fc18c99d2d73d1c431fc`. The final cross-repository
     audit found one invalid combined Xcode help path; skills #52 fixed it at
     exact head `1aeb0dc607d8fa327501bc4b1d1cf981448512f9` and landed as skills `main`
