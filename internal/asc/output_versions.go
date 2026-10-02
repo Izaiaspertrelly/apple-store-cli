@@ -48,6 +48,9 @@ type AppStoreVersionDetailResult struct {
 	BuildVersion string                              `json:"buildVersion,omitempty"`
 	SubmissionID string                              `json:"submissionId,omitempty"`
 	MetadataCopy *AppStoreVersionMetadataCopySummary `json:"metadataCopy,omitempty"`
+	// IdempotentWriteReceipt is populated by versions create; view and
+	// update leave it empty so their output is unchanged.
+	IdempotentWriteReceipt
 }
 
 // AppStoreVersionMetadataCopySummary represents metadata carry-forward details during version creation.
@@ -71,6 +74,19 @@ type AppStoreVersionAttachBuildResult struct {
 type AppStoreVersionReleaseRequestResult struct {
 	ReleaseRequestID string `json:"releaseRequestId"`
 	VersionID        string `json:"versionId"`
+}
+
+// AppStoreVersionRatingResetCreateResult represents CLI output for scheduling a rating reset.
+type AppStoreVersionRatingResetCreateResult struct {
+	RatingResetRequestID string `json:"ratingResetRequestId"`
+	VersionID            string `json:"versionId"`
+	Scheduled            bool   `json:"scheduled"`
+}
+
+// AppStoreVersionRatingResetDeleteResult represents CLI output for cancelling a rating reset.
+type AppStoreVersionRatingResetDeleteResult struct {
+	RatingResetRequestID string `json:"ratingResetRequestId"`
+	Cancelled            bool   `json:"cancelled"`
 }
 
 // AppStoreVersionsLatestResult represents a computed latest-version list.
@@ -157,7 +173,12 @@ func appStoreVersionSubmissionCancelRows(result *AppStoreVersionSubmissionCancel
 
 func appStoreVersionDetailRows(result *AppStoreVersionDetailResult) ([]string, [][]string) {
 	headers := []string{"Version ID", "Version", "Platform", "State", "Build ID", "Build Version", "Submission ID"}
-	rows := [][]string{{result.ID, result.VersionString, displayPlatform(result.Platform), result.State, result.BuildID, result.BuildVersion, result.SubmissionID}}
+	row := []string{result.ID, result.VersionString, displayPlatform(result.Platform), result.State, result.BuildID, result.BuildVersion, result.SubmissionID}
+	if result.Action != "" {
+		headers = append(headers, "Already Exists", "Action")
+		row = append(row, fmt.Sprintf("%t", result.AlreadyExists), result.Action)
+	}
+	rows := [][]string{row}
 	return headers, rows
 }
 
@@ -190,5 +211,17 @@ func appStoreVersionAttachBuildRows(result *AppStoreVersionAttachBuildResult) ([
 func appStoreVersionReleaseRequestRows(result *AppStoreVersionReleaseRequestResult) ([]string, [][]string) {
 	headers := []string{"Release Request ID", "Version ID"}
 	rows := [][]string{{result.ReleaseRequestID, result.VersionID}}
+	return headers, rows
+}
+
+func appStoreVersionRatingResetCreateRows(result *AppStoreVersionRatingResetCreateResult) ([]string, [][]string) {
+	headers := []string{"Rating Reset Request ID", "Version ID", "Scheduled"}
+	rows := [][]string{{result.RatingResetRequestID, result.VersionID, fmt.Sprintf("%t", result.Scheduled)}}
+	return headers, rows
+}
+
+func appStoreVersionRatingResetDeleteRows(result *AppStoreVersionRatingResetDeleteResult) ([]string, [][]string) {
+	headers := []string{"Rating Reset Request ID", "Cancelled"}
+	rows := [][]string{{result.RatingResetRequestID, fmt.Sprintf("%t", result.Cancelled)}}
 	return headers, rows
 }

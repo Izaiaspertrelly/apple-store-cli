@@ -2,14 +2,11 @@ package subscriptions
 
 import (
 	"context"
-	"time"
 
 	"github.com/Izaiaspertrelly/apple-store-cli/internal/cli/shared"
 )
 
 type reconciledMutationStatus string
-
-var subscriptionImportNow = func() time.Time { return time.Now().UTC() }
 
 const (
 	reconciledMutationCreated    reconciledMutationStatus = "created"

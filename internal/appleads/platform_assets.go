@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/Izaiaspertrelly/apple-store-cli/internal/asc"
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/readonly"
 )
 
 const platformAssetPromotedObjectType = "BUSINESS_BRAND"
@@ -56,6 +57,9 @@ func (c *Client) UploadPlatformAsset(ctx context.Context, file *os.File, fileSiz
 	}
 	requestURL, err := c.requestURLForVersion(APIVersionPlatformV1, "v1/assets/upload", nil)
 	if err != nil {
+		return nil, err
+	}
+	if err := readonly.Check(ctx, http.MethodPost, readonly.Target(requestURL)); err != nil {
 		return nil, err
 	}
 	token, err := c.bearerToken(ctx)

@@ -29,7 +29,7 @@ import (
 // dependency); it checks out and installs the reviewed source directly.
 const (
 	skillsInstallerPackage    = "skills@1.5.20"
-	skillsSourceRepositoryURL = "https://github.com/Izaiaspertrelly/apple-store-cli-skills.git"
+	skillsSourceRepositoryURL = "https://github.com/rorkai/app-store-connect-cli-skills.git"
 	skillsSourceCommit        = "f52c4f04323bb2dfb21ca8be82e6494e9cd0b4d8"
 	expectedSkillsCount       = 25
 )
@@ -461,7 +461,7 @@ func buildPinnedSkillLock(original []byte, names []string, now time.Time) ([]byt
 			}
 		}
 		fields := map[string]string{
-			"source":          "Izaiaspertrelly/apple-store-cli-skills",
+			"source":          "rorkai/app-store-connect-cli-skills",
 			"sourceType":      "github",
 			"sourceUrl":       skillsSourceRepositoryURL,
 			"ref":             skillsSourceCommit,

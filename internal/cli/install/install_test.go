@@ -93,7 +93,7 @@ func TestSkillsSourceIsPinnedToImmutableInput(t *testing.T) {
 	if !regexp.MustCompile(`^[0-9a-f]{40}$`).MatchString(skillsSourceCommit) {
 		t.Fatalf("skillsSourceCommit = %q, want a full 40-character commit SHA", skillsSourceCommit)
 	}
-	if skillsSourceRepositoryURL != "https://github.com/Izaiaspertrelly/apple-store-cli-skills.git" {
+	if skillsSourceRepositoryURL != "https://github.com/rorkai/app-store-connect-cli-skills.git" {
 		t.Fatalf("skillsSourceRepositoryURL = %q, want the reviewed ASC skills repository", skillsSourceRepositoryURL)
 	}
 	if len(expectedSkillNames) != expectedSkillsCount {
@@ -152,9 +152,9 @@ func TestInstallSkillsCopiesExactPackWithoutNodeAndPreservesUnrelatedData(t *tes
       "custom": {"preserve": true}
     },
     "asc-app-create-ui": {
-      "source": "Izaiaspertrelly/apple-store-cli-skills",
+      "source": "rorkai/app-store-connect-cli-skills",
       "sourceType": "github",
-      "sourceUrl": "https://github.com/Izaiaspertrelly/apple-store-cli-skills.git",
+      "sourceUrl": "https://github.com/rorkai/app-store-connect-cli-skills.git",
       "skillPath": "skills/asc-app-create-ui/SKILL.md",
       "skillFolderHash": "stale",
       "installedAt": "2026-01-02T03:04:05Z",
@@ -444,8 +444,8 @@ func TestUntrackedRecoveryLockRemovesOnlyASCEntries(t *testing.T) {
   "version": 3,
   "skills": {
     "unrelated": {"source": "local", "future": {"keep": true}},
-    "asc-app-create-ui": {"source": "Izaiaspertrelly/apple-store-cli-skills", "ref": "main"},
-    "asc-xcode-build": {"source": "Izaiaspertrelly/apple-store-cli-skills"}
+    "asc-app-create-ui": {"source": "rorkai/app-store-connect-cli-skills", "ref": "main"},
+    "asc-xcode-build": {"source": "rorkai/app-store-connect-cli-skills"}
   },
   "dismissed": {"findSkillsPrompt": true},
   "futureTopLevel": [1, 2, 3]
@@ -824,7 +824,7 @@ func assertPinnedLock(t *testing.T, path string, preservedInstalledAt string) {
 			t.Fatalf("lock is missing %s", name)
 		}
 		want := map[string]string{
-			"source":          "Izaiaspertrelly/apple-store-cli-skills",
+			"source":          "rorkai/app-store-connect-cli-skills",
 			"sourceType":      "github",
 			"sourceUrl":       skillsSourceRepositoryURL,
 			"ref":             skillsSourceCommit,

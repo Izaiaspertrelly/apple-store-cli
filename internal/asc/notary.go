@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+
+	"github.com/Izaiaspertrelly/apple-store-cli/internal/readonly"
 )
 
 const (
@@ -185,6 +187,9 @@ func (c *Client) newNotaryRequest(ctx context.Context, method, path string, body
 	if !strings.HasPrefix(path, "http://") && !strings.HasPrefix(path, "https://") {
 		url = c.resolveNotaryBaseURL() + path
 	}
+	if err := readonly.Check(ctx, method, readonly.Target(url)); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
@@ -231,9 +236,13 @@ func (c *Client) SubmitNotarization(ctx context.Context, sha256Hash, submissionN
 	if submissionName == "" {
 		return nil, fmt.Errorf("submission name is required")
 	}
+	normalizedHash, err := validateNotarySHA256(sha256Hash)
+	if err != nil {
+		return nil, err
+	}
 
 	payload := NotarySubmissionRequest{
-		Sha256:         sha256Hash,
+		Sha256:         normalizedHash,
 		SubmissionName: submissionName,
 	}
 
@@ -257,9 +266,10 @@ func (c *Client) SubmitNotarization(ctx context.Context, sha256Hash, submissionN
 
 // GetNotarizationStatus retrieves the status of a notarization submission.
 func (c *Client) GetNotarizationStatus(ctx context.Context, submissionID string) (*NotarySubmissionStatusResponse, error) {
-	submissionID = strings.TrimSpace(submissionID)
-	if submissionID == "" {
-		return nil, fmt.Errorf("submission ID is required")
+	var err error
+	submissionID, err = validateNotarySubmissionID(submissionID)
+	if err != nil {
+		return nil, err
 	}
 
 	path := fmt.Sprintf("%s/%s", notarySubmissionsPath, submissionID)
@@ -278,9 +288,10 @@ func (c *Client) GetNotarizationStatus(ctx context.Context, submissionID string)
 
 // GetNotarizationLogs retrieves the developer log URL for a notarization submission.
 func (c *Client) GetNotarizationLogs(ctx context.Context, submissionID string) (*NotarySubmissionLogsResponse, error) {
-	submissionID = strings.TrimSpace(submissionID)
-	if submissionID == "" {
-		return nil, fmt.Errorf("submission ID is required")
+	var err error
+	submissionID, err = validateNotarySubmissionID(submissionID)
+	if err != nil {
+		return nil, err
 	}
 
 	path := fmt.Sprintf("%s/%s/logs", notarySubmissionsPath, submissionID)
@@ -314,10 +325,39 @@ func (c *Client) ListNotarizations(ctx context.Context) (*NotarySubmissionsListR
 
 // ComputeFileSHA256 computes the SHA-256 hex digest of an opened file and
 // rewinds it so the same descriptor can be uploaded.
-func ComputeFileSHA256(file io.ReadSeeker) (string, error) {
+func ComputeFileSHA256(ctx context.Context, file io.ReadSeeker) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
-		return "", fmt.Errorf("read file: %w", err)
+	buffer := make([]byte, 64*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+
+		n, err := file.Read(buffer)
+		if n > 0 {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return "", ctxErr
+			}
+			if _, writeErr := h.Write(buffer[:n]); writeErr != nil {
+				return "", fmt.Errorf("hash file: %w", writeErr)
+			}
+		}
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			return "", fmt.Errorf("read file: %w", err)
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
 		return "", fmt.Errorf("rewind file: %w", err)
@@ -329,13 +369,18 @@ func ComputeFileSHA256(file io.ReadSeeker) (string, error) {
 // UploadToS3 uploads file data to the S3 bucket using AWS Signature V4 authentication.
 // This is a minimal implementation for the single PutObject operation needed by the Notary API.
 func UploadToS3(ctx context.Context, creds S3Credentials, data io.Reader, payloadHash string, contentLength int64, contentType string) error {
-	if creds.Bucket == "" || creds.Object == "" {
-		return fmt.Errorf("S3 bucket and object are required")
+	if err := validateNotaryS3Credentials(creds); err != nil {
+		return err
 	}
 	payloadHash = strings.TrimSpace(payloadHash)
 	if payloadHash == "" {
 		return fmt.Errorf("payload hash is required")
 	}
+	normalizedHash, err := validateNotarySHA256(payloadHash)
+	if err != nil {
+		return err
+	}
+	payloadHash = normalizedHash
 	if contentLength <= 0 {
 		return fmt.Errorf("content length must be positive")
 	}
@@ -348,6 +393,62 @@ func UploadToS3(ctx context.Context, creds S3Credentials, data io.Reader, payloa
 	}
 
 	return uploadSinglePartToS3(ctx, creds, data, payloadHash, contentLength, contentType)
+}
+
+func validateNotarySHA256(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if len(value) != sha256.Size*2 {
+		return "", fmt.Errorf("SHA-256 hash must be exactly 64 hexadecimal characters")
+	}
+	if _, err := hex.DecodeString(value); err != nil {
+		return "", fmt.Errorf("SHA-256 hash must contain only hexadecimal characters")
+	}
+	return strings.ToLower(value), nil
+}
+
+func validateNotarySubmissionID(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", fmt.Errorf("submission ID is required")
+	}
+	if len(value) != 36 {
+		return "", fmt.Errorf("submission ID must be a valid UUID")
+	}
+	for index := 0; index < len(value); index++ {
+		if index == 8 || index == 13 || index == 18 || index == 23 {
+			if value[index] != '-' {
+				return "", fmt.Errorf("submission ID must be a valid UUID")
+			}
+			continue
+		}
+		if !isHexDigit(value[index]) {
+			return "", fmt.Errorf("submission ID must be a valid UUID")
+		}
+	}
+	return value, nil
+}
+
+func isHexDigit(value byte) bool {
+	return value >= '0' && value <= '9' || value >= 'a' && value <= 'f' || value >= 'A' && value <= 'F'
+}
+
+func validateNotaryS3Credentials(creds S3Credentials) error {
+	if strings.TrimSpace(creds.AccessKeyID) == "" {
+		return fmt.Errorf("S3 access key ID is required")
+	}
+	if strings.TrimSpace(creds.SecretAccessKey) == "" {
+		return fmt.Errorf("S3 secret access key is required")
+	}
+	if strings.TrimSpace(creds.SessionToken) == "" {
+		return fmt.Errorf("S3 session token is required")
+	}
+	if strings.TrimSpace(creds.Bucket) == "" {
+		return fmt.Errorf("S3 bucket is required")
+	}
+	if strings.TrimSpace(creds.Object) == "" {
+		return fmt.Errorf("S3 object is required")
+	}
+	return nil
 }
 
 func uploadSinglePartToS3(ctx context.Context, creds S3Credentials, data io.Reader, payloadHash string, contentLength int64, contentType string) error {
@@ -363,6 +464,9 @@ func uploadSinglePartToS3(ctx context.Context, creds S3Credentials, data io.Read
 	now := time.Now().UTC()
 	amzDate := now.Format("20060102T150405Z")
 
+	if err := readonly.Check(ctx, http.MethodPut, readonly.Target(url)); err != nil {
+		return err
+	}
 	req, err := http.NewRequestWithContext(ctx, "PUT", url, data)
 	if err != nil {
 		return fmt.Errorf("create S3 request: %w", err)
@@ -869,6 +973,9 @@ func newS3Request(ctx context.Context, method, host, encodedPath, rawQuery strin
 	url := fmt.Sprintf("https://%s%s", host, encodedPath)
 	if rawQuery != "" {
 		url = url + "?" + rawQuery
+	}
+	if err := readonly.Check(ctx, method, readonly.Target(url)); err != nil {
+		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {

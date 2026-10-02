@@ -5,28 +5,39 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	rootcmd "github.com/Izaiaspertrelly/apple-store-cli/cmd"
+	authsvc "github.com/Izaiaspertrelly/apple-store-cli/internal/auth"
 	authcmd "github.com/Izaiaspertrelly/apple-store-cli/internal/cli/auth"
 )
 
 type authLogoutCalls struct {
-	names []string
-	all   int
+	names   []string
+	all     int
+	options []authsvc.RemoveOptions
 }
 
 func stubAuthLogoutRemovers(t *testing.T) *authLogoutCalls {
 	t.Helper()
+	// The retained-global-config warning reads the global config, so keep it
+	// away from the developer's home directory.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("ASC_CONFIG_PATH", filepath.Join(t.TempDir(), "config.json"))
 	calls := &authLogoutCalls{}
 	restore := authcmd.SetLogoutCredentialRemovers(
-		func(name string) error {
+		func(name string, opts authsvc.RemoveOptions) error {
 			calls.names = append(calls.names, name)
+			calls.options = append(calls.options, opts)
 			return nil
 		},
-		func() error {
+		func(opts authsvc.RemoveOptions) error {
 			calls.all++
+			calls.options = append(calls.options, opts)
 			return nil
 		},
 	)
